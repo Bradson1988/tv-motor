@@ -1,0 +1,32 @@
+name: Motor Windows static QA
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ggml-org/whisper.cpp
+          ref: v1.9.4
+      - name: Build CPU baseline, runtime static
+        run: |
+          cmake -S . -B build -A x64 -DBUILD_SHARED_LIBS=OFF -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF -DGGML_AVX=OFF -DGGML_AVX2=OFF -DGGML_FMA=OFF -DGGML_F16C=OFF -DWHISPER_BUILD_TESTS=OFF
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cmake --build build --config Release --target whisper-cli -j 4
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Load model and transcribe real audio
+        run: |
+          Invoke-WebRequest https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin -OutFile ggml-small.bin
+          if ((Get-FileHash ggml-small.bin -Algorithm SHA256).Hash -ne '1BE3A9B2063867B937E64E2EC7483364A79917E157FA98C5D94B5C1FFFEA987B') { throw 'Modelo invalido' }
+          & ./build/bin/Release/whisper-cli.exe -m ggml-small.bin -f samples/jfk.wav -l en -nt -otxt -of smoke
+          if ($LASTEXITCODE) { throw 'Whisper falhou' }
+          if ((Get-Content smoke.txt -Raw) -notmatch 'country') { throw 'Transcricao inesperada' }
+          New-Item -ItemType Directory -Force payload
+          Copy-Item build/bin/Release/whisper-cli.exe,ggml-small.bin,LICENSE,samples/jfk.wav,smoke.txt payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: whisper-windows-static
+          path: payload
+          retention-days: 7
