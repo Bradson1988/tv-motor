@@ -15,10 +15,17 @@ jobs:
           ref: v1.9.4
       - name: Build CPU baseline, runtime static
         run: |
-          cmake -S . -B build -A x64 -DBUILD_SHARED_LIBS=OFF -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF -DGGML_AVX=OFF -DGGML_AVX2=OFF -DGGML_FMA=OFF -DGGML_F16C=OFF -DWHISPER_BUILD_TESTS=OFF
+          cmake -S . -B build -A x64 -DBUILD_SHARED_LIBS=OFF -DCMAKE_POLICY_DEFAULT_CMP0091=NEW -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded -DGGML_STATIC=ON -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF -DGGML_AVX=OFF -DGGML_AVX2=OFF -DGGML_FMA=OFF -DGGML_F16C=OFF -DWHISPER_BUILD_TESTS=OFF
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           cmake --build build --config Release --target whisper-cli -j 4
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Reject external Visual C++ runtime
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe" -latest -property installationPath
+          $dumpbin = Get-ChildItem "$vs/VC/Tools/MSVC/*/bin/Hostx64/x64/dumpbin.exe" | Select-Object -Last 1
+          $imports = & $dumpbin.FullName /DEPENDENTS build/bin/Release/whisper-cli.exe
+          $imports | Out-File imports.txt
+          if ($imports -match 'VCRUNTIME|MSVCP|api-ms-win-crt') { throw 'Runtime dinamico detectado' }
       - name: Load model and transcribe real audio
         run: |
           Invoke-WebRequest https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin -OutFile ggml-small.bin
@@ -36,4 +43,5 @@ jobs:
             payload/LICENSE
             payload/jfk.wav
             payload/smoke.txt
+            imports.txt
           retention-days: 7
