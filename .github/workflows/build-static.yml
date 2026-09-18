@@ -1,5 +1,8 @@
 name: Motor Windows static QA
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+  push:
+    branches: [qa/windows-static-20260918]
 permissions:
   contents: read
 jobs:
